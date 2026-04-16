@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>수업자료 전송</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f7fb;
+      color: #1f2937;
+    }
+    .wrap {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .card {
+      background: white;
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+      margin-bottom: 18px;
+    }
+    h1 { margin-top: 0; }
+    h2 { margin-top: 0; font-size: 20px; }
+    .muted { color: #6b7280; font-size: 14px; }
+    .stack { display: grid; gap: 12px; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    input, button {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid #d1d5db;
+      font-size: 15px;
+    }
+    button {
+      background: #2563eb;
+      color: white;
+      border: none;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:hover { opacity: 0.95; }
+    .result {
+      background: #eef4ff;
+      border: 1px solid #bfd3ff;
+      border-radius: 14px;
+      min-height: 80px;
+      padding: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .hidden {
+      display: none;
+    }
+    @media (max-width: 720px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>수업자료 전송 웹</h1>
+      <p>
+        고유코드를 입력하고 파일을 올리면 Google Drive에 저장됩니다.
+        학생 앱은 같은 고유코드로 최신 파일을 찾아 내려받을 수 있습니다.
+      </p>
+      <p class="muted">
+        현재 버전은 빠른 테스트용입니다. 업로드된 파일은 링크가 있으면 다운로드할 수 있게 설정됩니다.
+      </p>
+    </div>
+
+    <div class="grid">
+      <div class="card stack">
+        <h2>파일 업로드</h2>
+
+        <div>
+          <label for="uploadCode">고유코드</label>
+          <input id="uploadCode" placeholder="예: CLASS101" />
+        </div>
+
+        <div>
+          <label for="uploadFile">파일 선택</label>
+          <input id="uploadFile" type="file" />
+        </div>
+
+        <button id="uploadBtn">업로드</button>
+        <div id="uploadResult" class="result">업로드 결과가 여기에 표시됩니다.</div>
+      </div>
+
+      <div class="card stack">
+        <h2>최신 파일 조회</h2>
+
+        <div>
+          <label for="lookupCode">고유코드</label>
+          <input id="lookupCode" placeholder="예: CLASS101" />
+        </div>
+
+        <button id="lookupBtn">최신 파일 확인</button>
+        <div id="lookupResult" class="result">조회 결과가 여기에 표시됩니다.</div>
+      </div>
+    </div>
+  </div>
+
+  <iframe name="gasFrame" id="gasFrame" class="hidden"></iframe>
+
+  <form id="uploadForm" class="hidden" method="POST" target="gasFrame">
+    <input type="hidden" name="action" value="upload" />
+    <input type="hidden" name="code" id="formCode" />
+    <input type="hidden" name="fileName" id="formFileName" />
+    <input type="hidden" name="mimeType" id="formMimeType" />
+    <input type="hidden" name="base64Data" id="formBase64Data" />
+  </form>
+
+  <form id="lookupForm" class="hidden" method="GET" target="gasFrame">
+    <input type="hidden" name="action" value="latest" />
+    <input type="hidden" name="code" id="lookupFormCode" />
+  </form>
+
+  <script>
+    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyo-4JwVv-agpJ9lluEkiovqCbOHDWeWD9ZAnrX-SzB0ZALdDidtqpOMuBmIu8_WBFG/exec";
+    const uploadForm = document.getElementById("uploadForm");
+    const lookupForm = document.getElementById("lookupForm");
+    uploadForm.action = GAS_WEB_APP_URL;
+    lookupForm.action = GAS_WEB_APP_URL;
+
+    const uploadBtn = document.getElementById("uploadBtn");
+    const lookupBtn = document.getElementById("lookupBtn");
+    const uploadResult = document.getElementById("uploadResult");
+    const lookupResult = document.getElementById("lookupResult");
+
+    function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result || "";
+          const base64 = String(result).split(",")[1];
+          if (!base64) {
+            reject(new Error("base64 변환에 실패했습니다."));
+            return;
+          }
+          resolve(base64);
+        };
+        reader.onerror = () => reject(new Error("파일 읽기에 실패했습니다."));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    uploadBtn.addEventListener("click", async () => {
+      try {
+        const code = document.getElementById("uploadCode").value.trim().toUpperCase();
+        const fileInput = document.getElementById("uploadFile");
+        const file = fileInput.files[0];
+
+        if (!code) {
+          uploadResult.textContent = "고유코드를 입력하세요.";
+          return;
+        }
+
+        if (!file) {
+          uploadResult.textContent = "파일을 선택하세요.";
+          return;
+        }
+
+        uploadResult.textContent = "파일 읽는 중...";
+        const base64 = await readFileAsBase64(file);
+
+        document.getElementById("formCode").value = code;
+        document.getElementById("formFileName").value = file.name;
+        document.getElementById("formMimeType").value = file.type || "application/octet-stream";
+        document.getElementById("formBase64Data").value = base64;
+
+        uploadResult.textContent = "업로드 요청 전송 중...";
+        uploadForm.submit();
+      } catch (err) {
+        uploadResult.textContent = err.message || String(err);
+      }
+    });
+
+    lookupBtn.addEventListener("click", () => {
+      const code = document.getElementById("lookupCode").value.trim().toUpperCase();
+
+      if (!code) {
+        lookupResult.textContent = "고유코드를 입력하세요.";
+        return;
+      }
+
+      document.getElementById("lookupFormCode").value = code;
+      lookupResult.textContent = "조회 중...";
+      lookupForm.submit();
+    });
+
+    window.addEventListener("message", (event) => {
+      const data = event.data;
+      if (!data || typeof data !== "object") return;
+
+      if (data.action === "upload") {
+        if (data.ok) {
+          uploadResult.textContent = [
+            "업로드 성공",
+            `코드: ${data.code}`,
+            `파일명: ${data.fileName}`,
+            `크기: ${data.size} bytes`,
+            `업로드 시각: ${data.uploadedAt}`,
+            `다운로드 링크: ${data.downloadUrl}`
+          ].join("\n");
+        } else {
+          uploadResult.textContent = data.error || "업로드 실패";
+        }
+      }
+
+      if (data.action === "latest") {
+        if (!data.ok) {
+          lookupResult.textContent = data.error || "조회 실패";
+          return;
+        }
+
+        if (!data.latest) {
+          lookupResult.textContent = "해당 코드의 최신 파일이 없습니다.";
+          return;
+        }
+
+        lookupResult.textContent = [
+          `코드: ${data.code}`,
+          `파일명: ${data.latest.fileName}`,
+          `크기: ${data.latest.size} bytes`,
+          `업로드 시각: ${data.latest.uploadedAt}`,
+          `다운로드 링크: ${data.latest.downloadUrl}`
+        ].join("\n");
+      }
+    });
+  </script>
+</body>
+</html>
