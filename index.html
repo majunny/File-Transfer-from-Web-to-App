@@ -257,11 +257,13 @@
         const data = await response.json();
         
         if (data.status === "success" && data.data) {
-          lookupResult.textContent = [
-            `파일명: ${data.data.fileName}`,
-            `업로드 시각: ${data.data.timestamp}`,
-            `다운로드 링크: ${data.data.downloadUrl}`
-          ].join("\n");
+          lookupResult.innerHTML = `
+            <div>파일명: ${data.data.fileName}</div>
+            <div>업로드 시각: ${data.data.timestamp}</div>
+            <a href="${data.data.downloadUrl}" target="_blank" class="download-btn">
+              다운로드
+            </a>
+          `;
         } else if (data.status === "error") {
            lookupResult.textContent = data.message || "해당 코드의 최신 파일이 없습니다.";
         } else {
